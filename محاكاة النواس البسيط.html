@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>محاكاة النواس البسيط</title>
+<style>
+:root{--bg1:#0f172a;--bg2:#1e293b;--tx:#e2e8f0;--mu:#94a3b8;--h:#93c5fd;--pn:#111827;--bd:#334155;--cv:#0b1220;--gd:#1e293b;--ax:#475569;--bl:#38bdf8;--rd:#f87171;--gr:#4ade80;--yl:#f59e0b;--bt:#2563eb;--bt2:#475569;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg1:#eef2f9;--bg2:#e2e8f4;--tx:#1d2433;--mu:#5d6679;--h:#1d4ed8;--pn:#fff;--bd:#d0d7e6;--cv:#f8fafc;--gd:#e2e8f0;--ax:#94a3b8;--bl:#0369a1;--rd:#dc2626;--gr:#16a34a;--yl:#b45309;color-scheme:light}}
+:root[data-theme="light"]{--bg1:#eef2f9;--bg2:#e2e8f4;--tx:#1d2433;--mu:#5d6679;--h:#1d4ed8;--pn:#fff;--bd:#d0d7e6;--cv:#f8fafc;--gd:#e2e8f0;--ax:#94a3b8;--bl:#0369a1;--rd:#dc2626;--gr:#16a34a;--yl:#b45309;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:linear-gradient(160deg,var(--bg1),var(--bg2));color:var(--tx);min-height:100vh;padding:16px}
+h1{text-align:center;font-size:1.3rem;margin:8px 0 18px;color:var(--h)}
+.container{max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--pn);border:1px solid var(--bd);border-radius:14px;padding:14px;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+canvas{display:block;width:100%;background:var(--cv);border-radius:10px}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:center}
+.cg{display:flex;flex-direction:column;align-items:center;min-width:110px}
+.cg label{font-size:.85rem;color:var(--mu);margin-bottom:4px}
+.cg span{font-weight:bold;color:var(--bl)}
+input[type=range]{width:130px}
+select{background:var(--cv);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:4px 8px;font:inherit}
+.buttons{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;align-items:center}
+.buttons label{font-size:.85rem;color:var(--mu)}
+button{background:var(--bt);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:.95rem;cursor:pointer}
+button.s{background:var(--bt2)}
+.info{text-align:center;font-size:.9rem;margin-top:8px;direction:ltr}
+.note{text-align:center;font-size:.8rem;color:var(--yl);margin-top:6px}
+</style>
+</head>
+<body>
+<h1>محاكاة النواس البسيط (Pendule simple)</h1>
+<div class="container">
+<div class="panel">
+<canvas id="cv"></canvas>
+<div class="note">الكرية تهتز حول وضع التوازن، والخط المتقطع يربط موضعها الأفقي x بنقطة المنحنى x(t) في اللحظة نفسها.</div>
+</div>
+<div class="panel controls">
+<div class="cg"><label>طول الخيط L (m) <span id="lV">1.0</span></label><input type="range" id="l" min="0.2" max="2" step="0.1" value="1"></div>
+<div class="cg"><label>السعة الزاوية θm (°) <span id="aV">15</span></label><input type="range" id="a" min="2" max="60" step="1" value="15"></div>
+<div class="cg"><label>الكوكب (g)<select id="g"><option value="9.8">الأرض 9.8</option><option value="1.62">القمر 1.62</option><option value="3.71">المريخ 3.71</option><option value="24.8">المشتري 24.8</option></select></label></div>
+</div>
+<div class="panel">
+<div class="buttons">
+<button id="pb">⏸ إيقاف مؤقت</button><button id="rb" class="s">↺ إعادة</button>
+<label><input type="checkbox" id="lin"> تقريب الزوايا الصغيرة (جيبي تمامًا)</label>
+</div>
+<div class="info" id="eq"></div>
+<div class="info" id="li"></div>
+</div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('cv'),c=cv.getContext('2d');
+var $=function(i){return document.getElementById(i)};
+var L=1,am=15,g=9.8,run=true,t=0,th=0,w=0,last=null,W=0,H=600,win=8,hist=[];
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function resize(){var r=window.devicePixelRatio||1;W=cv.clientWidth;cv.style.height=H+'px';cv.width=W*r;cv.height=H*r;c.setTransform(r,0,0,r,0,0)}
+function T0(){return 2*Math.PI*Math.sqrt(L/g)}
+function Tr(){var a=am*Math.PI/180;return T0()*(1+a*a/16+11*Math.pow(a,4)/3072)}
+function acc(q){return -(g/L)*Math.sin(q)}
+function set(){var a=am*Math.PI/180;if($('lin').checked){var o=Math.sqrt(g/L);th=a*Math.cos(o*t);w=-a*o*Math.sin(o*t)}}
+function adv(dt){
+if($('lin').checked){t+=dt;set();return}
+var n=Math.ceil(dt/0.002),h=dt/n;
+for(var i=0;i<n;i++){
+var k1a=w,k1b=acc(th),k2a=w+h/2*k1b,k2b=acc(th+h/2*k1a),k3a=w+h/2*k2b,k3b=acc(th+h/2*k2a),k4a=w+h*k3b,k4b=acc(th+h*k3a);
+th+=h/6*(k1a+2*k2a+2*k3a+k4a);w+=h/6*(k1b+2*k2b+2*k3b+k4b)}
+t+=dt}
+function reset(){t=0;th=am*Math.PI/180;w=0;hist=[{t:0,x:L*Math.sin(th)}]}
+function tx(s,x,y,color,al,f){c.fillStyle=color;c.textAlign=al||'center';c.font=f||'11px sans-serif';c.fillText(s,x,y)}
+function draw(){
+c.clearRect(0,0,W,H);
+var cx=W/2,s=Math.min(90,(W/2-30)/1.75),pyv=34,gTop=272,gBot=H-28,ph=gBot-gTop;
+var ax=col('--ax'),mu=col('--mu'),bl=col('--bl'),rd=col('--rd'),gr=col('--gr'),gd=col('--gd');
+var bx=cx+L*s*Math.sin(th),by=pyv+L*s*Math.cos(th);
+// support
+c.fillStyle=ax;c.fillRect(cx-60,pyv-14,120,8);
+// verticale d'équilibre
+c.strokeStyle=ax;c.setLineDash([4,4]);c.lineWidth=1;c.beginPath();c.moveTo(cx,pyv);c.lineTo(cx,pyv+L*s+30);c.stroke();c.setLineDash([]);
+// arc trajectoire
+c.strokeStyle=gd;c.lineWidth=1;c.beginPath();var a0=am*Math.PI/180;c.arc(cx,pyv,L*s,Math.PI/2-a0,Math.PI/2+a0);c.stroke();
+// angle
+var r=Math.min(40,L*s*0.4);c.strokeStyle=gr;c.lineWidth=2;c.beginPath();
+c.arc(cx,pyv,r,Math.PI/2,Math.PI/2-th,th>0);c.stroke();
+tx('θ = '+(th*180/Math.PI).toFixed(1)+'°',cx+(th>=0?-r-6:r+6),pyv+r+16,gr,th>=0?'right':'left','12px sans-serif');
+// fil + boule
+c.strokeStyle=mu;c.lineWidth=2;c.beginPath();c.moveTo(cx,pyv);c.lineTo(bx,by);c.stroke();
+var gg=c.createRadialGradient(bx-4,by-4,3,bx,by,15);gg.addColorStop(0,'#7dd3fc');gg.addColorStop(1,'#0284c7');
+c.fillStyle=gg;c.beginPath();c.arc(bx,by,15,0,7);c.fill();c.strokeStyle='#e0f2fe';c.lineWidth=1;c.stroke();
+c.fillStyle=mu;c.beginPath();c.arc(cx,pyv,4,0,7);c.fill();
+tx('L',cx+(bx>=cx?-12:12),(pyv+by)/2,mu,'center','12px sans-serif');
+// lien vers courbe
+c.strokeStyle=rd;c.setLineDash([5,4]);c.lineWidth=1.3;c.beginPath();c.moveTo(bx,by+15);c.lineTo(bx,gTop);c.stroke();c.setLineDash([]);
+// courbe
+c.strokeStyle=ax;c.lineWidth=1;c.beginPath();c.moveTo(cx,gTop);c.lineTo(cx,gBot);c.moveTo(14,gTop);c.lineTo(W-14,gTop);c.stroke();
+tx('x (cm)',cx,gTop-6,mu);tx('t (s) ↓',34,gTop-6,mu);
+var t0=Math.max(0,t-win);
+for(var k=Math.ceil(t0);k<=t0+win;k++){var gy=gTop+(t-k)/win*ph;if(gy<gTop||gy>gBot)continue;
+c.strokeStyle=gd;c.beginPath();c.moveTo(14,gy);c.lineTo(W-14,gy);c.stroke();tx(k+'',12,gy+3,mu,'left','10px sans-serif')}
+c.strokeStyle=bl;c.lineWidth=2;c.beginPath();var st=false;
+for(var i=hist.length-1;i>=0;i--){var p=hist[i];if(p.t<t0)break;var X=cx+p.x*s,Y=gTop+(t-p.t)/win*ph;if(!st){c.moveTo(X,Y);st=true}else c.lineTo(X,Y)}
+c.stroke();
+c.fillStyle=rd;c.beginPath();c.arc(bx,gTop,5,0,7);c.fill();
+}
+function info(){
+$('eq').textContent='T₀ = 2π√(L/g) = '+T0().toFixed(3)+' s   |   T (فعلي) ≈ '+(($('lin').checked)?T0().toFixed(3):Tr().toFixed(3))+' s';
+$('li').textContent='t = '+t.toFixed(2)+' s  |  θ = '+(th*180/Math.PI).toFixed(1)+'°  |  x = '+(L*Math.sin(th)*100).toFixed(1)+' cm  |  ω = '+(w).toFixed(2)+' rad/s';
+}
+function step(ts){
+if(last===null)last=ts;var dt=Math.min((ts-last)/1000,0.05);last=ts;
+if(run){adv(dt);hist.push({t:t,x:L*Math.sin(th)});while(hist.length&&hist[0].t<t-win-1)hist.shift();draw();info()}
+requestAnimationFrame(step)}
+function full(){reset();draw();info()}
+$('l').oninput=function(){L=parseFloat(this.value);$('lV').textContent=L.toFixed(1);full()};
+$('a').oninput=function(){am=parseFloat(this.value);$('aV').textContent=am;full()};
+$('g').onchange=function(){g=parseFloat(this.value);full()};
+$('lin').onchange=full;
+$('pb').onclick=function(){run=!run;this.textContent=run?'⏸ إيقاف مؤقت':'▶ تشغيل'};
+$('rb').onclick=full;
+window.addEventListener('resize',function(){resize();draw()});
+resize();full();requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>
